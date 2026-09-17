@@ -1,4 +1,4 @@
-name: "Build CrossCode"
+name: "Build CrossCode for IOS"
 
 on:
   push:

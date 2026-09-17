@@ -48,9 +48,7 @@ jobs:
           bun-version: latest
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
-      # ----------------------------------------------------------
-      # Initialize Tauri iOS
-      # ----------------------------------------------------------
+
       - name: Initialize Tauri iOS
         run: |
           if [ ! -d "src-tauri/gen/apple" ]; then

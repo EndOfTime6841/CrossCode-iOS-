@@ -1,0 +1,173 @@
+name: Build Unsigned CrossCode iOS IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-crosscode-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Frontend Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Rust Stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Verify Toolchains
+        run: |
+          bun --version
+          rustc --version
+          cargo --version
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Verify Vite and React Plugin
+        shell: bash
+        run: |
+          VITE_VERSION=$(bun pm ls | grep -E 'vite@' | head -n 1 | sed -E 's/.*vite@([^ ]+).*/\1/')
+          PLUGIN_VERSION=$(bun pm ls | grep -E '@vitejs/plugin-react@' | head -n 1 | sed -E 's/.*@vitejs\/plugin-react@([^ ]+).*/\1/')
+
+          echo "vite: $VITE_VERSION"
+          echo "@vitejs/plugin-react: $PLUGIN_VERSION"
+
+          if [[ -z "$VITE_VERSION" ]]; then
+            echo "Vite is not installed"
+            exit 1
+          fi
+
+          if [[ -z "$PLUGIN_VERSION" ]]; then
+            echo "@vitejs/plugin-react is not installed"
+            exit 1
+          fi
+
+          VITE_MAJOR=$(echo "$VITE_VERSION" | cut -d. -f1)
+          PLUGIN_MAJOR=$(echo "$PLUGIN_VERSION" | cut -d. -f1)
+
+          if [[ "$PLUGIN_MAJOR" -ge 5 && "$VITE_MAJOR" -lt 6 ]]; then
+            echo "@vitejs/plugin-react v$PLUGIN_MAJOR requires Vite v6+"
+            exit 1
+          fi
+
+          if [[ "$PLUGIN_MAJOR" -lt 5 && "$VITE_MAJOR" -ge 6 ]]; then
+            echo "Vite v$VITE_MAJOR requires @vitejs/plugin-react v5+"
+            exit 1
+          fi
+
+      - name: Setup Tauri CLI
+        run: bun add -g @tauri-apps/cli@latest
+
+      - name: Verify Tauri CLI
+        run: tauri --version
+
+      - name: Build Web Assets
+        run: bun run build
+
+      - name: Initialize Tauri iOS
+        run: tauri ios init --ci
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        shell: bash
+        run: |
+          cd src-tauri/gen/apple
+
+          if [[ -f project.yml ]]; then
+            xcodegen generate
+          fi
+
+      - name: Detect Xcode Workspace or Project
+        id: xcode
+        shell: bash
+        run: |
+          cd src-tauri/gen/apple
+
+          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -print -quit)
+          PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" -print -quit)
+
+          if [[ -n "$WORKSPACE" ]]; then
+            echo "type=workspace" >> "$GITHUB_OUTPUT"
+            echo "path=${WORKSPACE#./}" >> "$GITHUB_OUTPUT"
+            echo "scheme=$(basename "$WORKSPACE" .xcworkspace)" >> "$GITHUB_OUTPUT"
+          elif [[ -n "$PROJECT" ]]; then
+            echo "type=project" >> "$GITHUB_OUTPUT"
+            echo "path=${PROJECT#./}" >> "$GITHUB_OUTPUT"
+            echo "scheme=$(basename "$PROJECT" .xcodeproj)" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Xcode workspace or project found"
+            exit 1
+          fi
+
+      - name: Build Unsigned Archive
+        shell: bash
+        run: |
+          cd src-tauri/gen/apple
+
+          if [[ "${{ steps.xcode.outputs.type }}" == "workspace" ]]; then
+            xcodebuild archive \
+              -workspace "${{ steps.xcode.outputs.path }}" \
+              -scheme "${{ steps.xcode.outputs.scheme }}" \
+              -archivePath "$RUNNER_TEMP/CrossCode.xcarchive" \
+              -sdk iphoneos \
+              -configuration Release \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              PROVISIONING_PROFILE_SPECIFIER=""
+          else
+            xcodebuild archive \
+              -project "${{ steps.xcode.outputs.path }}" \
+              -scheme "${{ steps.xcode.outputs.scheme }}" \
+              -archivePath "$RUNNER_TEMP/CrossCode.xcarchive" \
+              -sdk iphoneos \
+              -configuration Release \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              PROVISIONING_PROFILE_SPECIFIER=""
+          fi
+
+      - name: Locate Built App
+        shell: bash
+        run: |
+          APP_PATH=$(find "$RUNNER_TEMP/CrossCode.xcarchive/Products/Applications" -maxdepth 2 -name "*.app" -type d -print -quit)
+
+          if [[ -z "$APP_PATH" ]]; then
+            echo "No .app found in archive"
+            exit 1
+          fi
+
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+
+      - name: Package Unsigned IPA
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/Payload"
+          mkdir -p "$RUNNER_TEMP/Payload"
+
+          cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
+
+          cd "$RUNNER_TEMP"
+          zip -r CrossCode-iOS-Unsigned.ipa Payload
+
+      - name: Upload Unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrossCode-iOS-Unsigned
+          path: ${{ runner.temp }}/CrossCode-iOS-Unsigned.ipa
+          retention-days: 14

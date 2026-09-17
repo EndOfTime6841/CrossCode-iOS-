@@ -24,29 +24,51 @@ jobs:
       - name: Select Xcode Version
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Install Frontend Dependencies & Inject Plugins
+      - name: Install Frontend Dependencies
         run: |
-          # 1. Standard package resolution
-          bun install
-          
-          # 2. Explicitly force-inject the specific plugins causing Vite config breaks
-          bun add -d @vitejs/plugin-react @codingame/esbuild-import-meta-url-plugin
+          # Standard package resolution using the lockfile as-is.
+          # NOTE: if this step fails with ERR_PACKAGE_PATH_NOT_EXPORTED
+          # referencing vite/plugin-react, your package.json has a
+          # version mismatch between "vite" and "@vitejs/plugin-react".
+          # Fix it there rather than force-injecting versions here -
+          # doing it in CI just hides a broken lockfile.
+          bun install --frozen-lockfile
 
-      - name: Setup Tauri CLI & Build Web Assets
+      - name: Verify Vite / plugin-react compatibility
         run: |
-          bun add -g @tauri-apps/cli
-          # Build frontend assets into the distribution target folder
-          bun run build
+          VITE_VERSION=$(bun pm ls | grep -E '^vite@' | sed -E 's/.*@//')
+          PLUGIN_VERSION=$(bun pm ls | grep -E '^@vitejs/plugin-react@' | sed -E 's/.*@//')
+          echo "vite: $VITE_VERSION"
+          echo "@vitejs/plugin-react: $PLUGIN_VERSION"
+
+          VITE_MAJOR=$(echo "$VITE_VERSION" | cut -d. -f1)
+          PLUGIN_MAJOR=$(echo "$PLUGIN_VERSION" | cut -d. -f1)
+
+          # plugin-react v5+ requires Vite 6+, plugin-react v4 pairs with Vite 5.
+          if [[ "$PLUGIN_MAJOR" -ge 5 && "$VITE_MAJOR" -lt 6 ]]; then
+            echo "::error::@vitejs/plugin-react v$PLUGIN_MAJOR requires vite v6+, but vite v$VITE_MAJOR is installed. Update package.json."
+            exit 1
+          fi
+          if [[ "$PLUGIN_MAJOR" -lt 5 && "$VITE_MAJOR" -ge 6 ]]; then
+            echo "::error::vite v$VITE_MAJOR requires @vitejs/plugin-react v5+, but v$PLUGIN_MAJOR is installed. Update package.json."
+            exit 1
+          fi
+
+      - name: Setup Tauri CLI
+        run: bun add -g @tauri-apps/cli
+
+      - name: Build Web Assets
+        run: bun run build
 
       - name: Force Generate Native iOS Files (XcodeGen)
         run: |
           brew install xcodegen
-          
+
           # Initialize iOS project structure natively
           tauri ios init --ci || true
-          
+
           mkdir -p src-tauri/gen/apple
-          
+
           # Force create the project layout files from configuration templates
           cd src-tauri/gen/apple
           if [ -f project.yml ]; then
@@ -59,14 +81,14 @@ jobs:
       - name: Build Unsigned Archive via xcodebuild
         run: |
           cd src-tauri/gen/apple
-          
+
           # Dynamically capture workspace configuration variables
           WORKSPACE_NAME=$(ls -d *.xcworkspace 2>/dev/null | head -n 1 || ls -d *.xcodeproj 2>/dev/null | head -n 1)
           SCHEME_NAME=$(basename "$WORKSPACE_NAME" | cut -f 1 -d '.')
-          
+
           echo "Target File Identified: $WORKSPACE_NAME"
           echo "Target Scheme Identified: $SCHEME_NAME"
-          
+
           if [[ "$WORKSPACE_NAME" == *.xcworkspace ]]; then
             TARGET_FLAG="-workspace $WORKSPACE_NAME"
           else
@@ -86,10 +108,10 @@ jobs:
       - name: Package App into Unsigned IPA
         run: |
           mkdir -p $RUNNER_TEMP/Payload
-          
+
           # Extract compiled binary bundle out of the build archive
           find $RUNNER_TEMP/CrossCode.xcarchive/Products/Applications/ -name "*.app" -exec cp -R {} $RUNNER_TEMP/Payload/ \;
-          
+
           cd $RUNNER_TEMP
           zip -r CrossCode-iOS-Unsigned.ipa Payload
 

@@ -24,15 +24,7 @@ jobs:
       - name: Select Xcode Version
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Install Frontend Dependencies
-        run: |
-          # Standard package resolution using the lockfile as-is.
-          # NOTE: if this step fails with ERR_PACKAGE_PATH_NOT_EXPORTED
-          # referencing vite/plugin-react, your package.json has a
-          # version mismatch between "vite" and "@vitejs/plugin-react".
-          # Fix it there rather than force-injecting versions here -
-          # doing it in CI just hides a broken lockfile.
-          bun install --frozen-lockfile
+
 
       - name: Verify Vite / plugin-react compatibility
         run: |

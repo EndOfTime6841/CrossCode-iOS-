@@ -11,11 +11,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Bun (Frontend PackageManager)
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
       - name: Install Rust Stable (For Tauri Backend)
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -24,26 +19,24 @@ jobs:
       - name: Select Xcode Version
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Install Frontend Dependencies & Force Plugins
+      - name: Install Frontend Dependencies via NPM
         run: |
-          bun install
-          bun add -d @vitejs/plugin-react
+          # npm install resolves peer dependency versions safely automatically
+          npm install --legacy-peer-deps
 
       - name: Setup Tauri CLI & Build Web Assets
         run: |
-          bun add -g @tauri-apps/cli
-          # Build frontend assets into the dist folder manually so Tauri can see them
-          bun run build
+          # Use npm to run commands cleanly inside the working node ecosystem
+          npm install -g @tauri-apps/cli
+          npm run build
 
       - name: Force Generate Native iOS Files (XcodeGen)
         run: |
-          # Install XcodeGen, which generates the project from Tauri's internal configuration
           brew install xcodegen
           
-          # Initialize iOS project base
-          bun tauri ios init --ci || true
+          # Initialize iOS project structure
+          tauri ios init --ci || true
           
-          # Force create the directory structure if Tauri skipped it
           mkdir -p src-tauri/gen/apple
           
           # Run XcodeGen over Tauri's template project specification file
@@ -51,9 +44,8 @@ jobs:
           if [ -f project.yml ]; then
             xcodegen generate
           else
-            # Fallback fallback if Tauri keeps configuration at the root
             cd ../../
-            bun tauri ios init --ci || true
+            tauri ios init --ci || true
           fi
 
       - name: Build Unsigned Archive via xcodebuild
@@ -100,6 +92,7 @@ jobs:
           name: CrossCode-iOS-Unsigned
           path: ${{ runner.temp }}/CrossCode-iOS-Unsigned.ipa
           retention-days: 14
+
 
 
 

@@ -1,4 +1,4 @@
-name: "Build CrossCode iOS"
+name: "Build CrossCode for iOS"
 on:
   workflow_dispatch:
   release:

@@ -51,7 +51,7 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
       # ----------------------------------------------------------
-      # Initialize Tauri iOS
+      # Initialize & Prepare Tauri iOS Assets
       # ----------------------------------------------------------
       - name: Initialize Tauri iOS
         run: |
@@ -59,24 +59,44 @@ jobs:
             bunx tauri ios init
           fi
       # ----------------------------------------------------------
-      # Build IPA
+      # Build, Archive, and Package IPA
       # ----------------------------------------------------------
-      - name: Build iOS IPA
+      - name: Build Unsigned iOS IPA
         run: |
-          bunx tauri ios build -- --no-sign --verbose
+          # 1. Fetch your Tauri app bundle name dynamically
+          APP_NAME=$(node -e "const c = require('./src-tauri/tauri.conf.json'); console.log(c.productName || c.identifier.split('.').pop());")
+          echo "Building app named: $APP_NAME"
+          
+          # 2. Build via xcodebuild, forcing Apple to skip signing
+          xcodebuild archive \
+            -project src-tauri/gen/apple/$APP_NAME.xcodeproj \
+            -scheme "${APP_NAME}_iOS" \
+            -archivePath src-tauri/gen/apple/build/App.xcarchive \
+            -configuration Release \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+            
+          # 3. Create the payload structure required for an IPA package
+          mkdir -p src-tauri/gen/apple/build/Payload
+          cp -r src-tauri/gen/apple/build/App.xcarchive/Products/Applications/$APP_NAME.app src-tauri/gen/apple/build/Payload/
+          
+          # 4. Generate the final zipped .ipa archive
+          cd src-tauri/gen/apple/build
+          zip -r CrossCode-iOS.ipa Payload
+          
+          # 5. Export variables for the next pipeline steps
+          echo "FINAL_IPA_PATH=$(pwd)/CrossCode-iOS.ipa" >> $GITHUB_ENV
       # ----------------------------------------------------------
       # Locate IPA
       # ----------------------------------------------------------
       - name: Locate IPA
         run: |
           echo "Searching for IPA..."
-          find src-tauri/gen/apple -type f -name "*.ipa" -print
-          IPA=$(find src-tauri/gen/apple -type f -name "*.ipa" | head -n 1)
-          if [ -z "$IPA" ]; then
+          if [ ! -f "$FINAL_IPA_PATH" ]; then
             echo "ERROR: No IPA was generated."
             exit 1
           fi
-          echo "IPA=$IPA" >> "$GITHUB_ENV"
+          echo "IPA=$FINAL_IPA_PATH" >> "$GITHUB_ENV"
       # ----------------------------------------------------------
       # Upload IPA to GitHub Release
       # ----------------------------------------------------------
@@ -91,3 +111,4 @@ jobs:
             "${{ github.event.release.tag_name }}" \
             "release-assets/CrossCode-iOS.ipa" \
             --clobber
+

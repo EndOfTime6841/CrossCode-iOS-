@@ -1,0 +1,424 @@
+name: "Build CrossCode"
+
+on:
+  push:
+    branches:
+      - "*"
+
+  pull_request:
+    branches:
+      - "*"
+
+  workflow_dispatch:
+
+  release:
+    types: [published]
+
+
+jobs:
+
+  # ============================================================
+  # DESKTOP BUILDS
+  # ============================================================
+
+  build:
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - platform: "ubuntu-22.04"
+            args: "--bundles deb"
+
+          - platform: "ubuntu-22.04"
+            args: "--bundles rpm"
+
+          - platform: "ubuntu-22.04"
+            args: "--bundles appimage"
+
+          - platform: "windows-latest"
+            args: ""
+
+          - platform: "macos-latest"
+            args: "--target aarch64-apple-darwin"
+
+          - platform: "macos-15-intel"
+            args: "--target x86_64-apple-darwin"
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      # ----------------------------------------------------------
+      # Cache
+      # ----------------------------------------------------------
+
+      - name: Cache Rust and Bun dependencies
+        uses: actions/cache@v4
+
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+            node_modules
+
+          key: ${{ matrix.platform }}-crosscode-${{ hashFiles('**/Cargo.lock', 'bun.lockb', 'bun.lock') }}
+
+          restore-keys: |
+            ${{ runner.os }}-crosscode-
+
+
+      # ----------------------------------------------------------
+      # Rust
+      # ----------------------------------------------------------
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+        with:
+          targets: ${{ (matrix.platform == 'macos-latest' || matrix.platform == 'macos-15-intel') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+
+      # ----------------------------------------------------------
+      # Linux dependencies
+      # ----------------------------------------------------------
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            perl \
+            make
+
+
+      # ----------------------------------------------------------
+      # Windows
+      # ----------------------------------------------------------
+
+      - name: Add MSVC to PATH
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
+
+      - name: Install Perl and Make for Windows
+        if: matrix.platform == 'windows-latest'
+
+        run: |
+          choco install strawberryperl make --no-progress
+
+
+      # ----------------------------------------------------------
+      # Bun
+      # ----------------------------------------------------------
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+        with:
+          bun-version: latest
+
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+
+      # ----------------------------------------------------------
+      # Clean bundles
+      # ----------------------------------------------------------
+
+      - name: Clean old bundles
+        if: matrix.platform != 'macos-latest' && matrix.platform != 'macos-15-intel'
+
+        run: |
+          bunx rimraf src-tauri/target/release/bundle
+
+
+      - name: Clean Apple Silicon bundles
+        if: matrix.platform == 'macos-latest'
+
+        run: |
+          bunx rimraf src-tauri/target/aarch64-apple-darwin/release/bundle
+
+
+      - name: Clean Intel bundles
+        if: matrix.platform == 'macos-15-intel'
+
+        run: |
+          bunx rimraf src-tauri/target/x86_64-apple-darwin/release/bundle
+
+
+      # ----------------------------------------------------------
+      # Desktop build
+      # ----------------------------------------------------------
+
+      - name: Build desktop application
+        uses: tauri-apps/tauri-action@v0
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+        with:
+          args: ${{ matrix.args }}
+
+          includeUpdaterJson: ${{ github.event_name == 'release' }}
+
+          releaseId: ${{ github.event_name == 'release' && github.event.release.id || '' }}
+
+
+      # ----------------------------------------------------------
+      # macOS DMG
+      # ----------------------------------------------------------
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+
+        if: matrix.platform == 'macos-latest' || matrix.platform == 'macos-15-intel'
+
+        with:
+          name: macos-dmg-${{ matrix.args == '--target aarch64-apple-darwin' && 'arm64' || 'x64' }}
+
+          path: |
+            ${{ github.workspace }}/src-tauri/target/**/release/bundle/**/*.dmg
+
+
+      # ----------------------------------------------------------
+      # Linux DEB
+      # ----------------------------------------------------------
+
+      - name: Upload Linux DEB
+        uses: actions/upload-artifact@v4
+
+        if: matrix.platform == 'ubuntu-22.04' && matrix.args == '--bundles deb'
+
+        with:
+          name: linux-deb
+
+          path: |
+            ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.deb
+
+
+      # ----------------------------------------------------------
+      # Linux RPM
+      # ----------------------------------------------------------
+
+      - name: Upload Linux RPM
+        uses: actions/upload-artifact@v4
+
+        if: matrix.platform == 'ubuntu-22.04' && matrix.args == '--bundles rpm'
+
+        with:
+          name: linux-rpm
+
+          path: |
+            ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.rpm
+
+
+      # ----------------------------------------------------------
+      # Linux AppImage
+      # ----------------------------------------------------------
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+
+        if: matrix.platform == 'ubuntu-22.04' && matrix.args == '--bundles appimage'
+
+        with:
+          name: linux-appimage
+
+          path: |
+            ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.AppImage
+
+
+      # ----------------------------------------------------------
+      # Windows EXE
+      # ----------------------------------------------------------
+
+      - name: Upload Windows EXE
+        uses: actions/upload-artifact@v4
+
+        if: matrix.platform == 'windows-latest'
+
+        with:
+          name: windows-exe
+
+          path: |
+            ${{ github.workspace }}/src-tauri/target/release/bundle/**/*.exe
+
+
+
+  # ============================================================
+  # iOS BUILD
+  # ============================================================
+
+  build-ios:
+
+    # iOS builds require macOS/Xcode
+    runs-on: macos-latest
+
+    permissions:
+      contents: write
+
+    steps:
+
+      # ----------------------------------------------------------
+      # Checkout
+      # ----------------------------------------------------------
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      # ----------------------------------------------------------
+      # Xcode
+      # ----------------------------------------------------------
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+
+          xcodebuild -version
+
+          xcode-select -p
+
+
+      # ----------------------------------------------------------
+      # Rust iOS targets
+      # ----------------------------------------------------------
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+        with:
+          targets: |
+            aarch64-apple-ios
+            aarch64-apple-ios-sim
+            x86_64-apple-ios
+
+
+      # ----------------------------------------------------------
+      # Cache Rust
+      # ----------------------------------------------------------
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+
+          key: ios-crosscode-${{ hashFiles('**/Cargo.lock') }}
+
+          restore-keys: |
+            ios-crosscode-
+
+
+      # ----------------------------------------------------------
+      # Bun
+      # ----------------------------------------------------------
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+        with:
+          bun-version: latest
+
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+
+      # ----------------------------------------------------------
+      # Initialize Tauri iOS project
+      # ----------------------------------------------------------
+
+      - name: Initialize Tauri iOS
+        run: |
+          if [ ! -d "src-tauri/gen/apple" ]; then
+            bunx tauri ios init
+          fi
+
+
+      # ----------------------------------------------------------
+      # Build IPA
+      # ----------------------------------------------------------
+
+      - name: Build iOS IPA
+        if: github.event_name == 'release'
+
+        env:
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+
+        run: |
+          bunx tauri ios build --export-method app-store-connect
+
+
+      # ----------------------------------------------------------
+      # Find IPA
+      # ----------------------------------------------------------
+
+      - name: Locate IPA
+        if: github.event_name == 'release'
+
+        run: |
+          find src-tauri/gen/apple/build -type f -name "*.ipa" -print
+
+
+      # ----------------------------------------------------------
+      # Rename IPA
+      # ----------------------------------------------------------
+
+      - name: Prepare IPA
+        if: github.event_name == 'release'
+
+        run: |
+          mkdir -p release-assets
+
+          IPA=$(find src-tauri/gen/apple/build -type f -name "*.ipa" | head -n 1)
+
+          if [ -z "$IPA" ]; then
+            echo "ERROR: IPA was not generated."
+            exit 1
+          fi
+
+          cp "$IPA" "release-assets/CrossCode-iOS.ipa"
+
+          ls -lh release-assets/CrossCode-iOS.ipa
+
+
+      # ----------------------------------------------------------
+      # Upload IPA directly to GitHub Release
+      # ----------------------------------------------------------
+
+      - name: Upload IPA to GitHub Release
+        if: github.event_name == 'release'
+
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+        run: |
+          gh release upload \
+            "${{ github.event.release.tag_name }}" \
+            "release-assets/CrossCode-iOS.ipa" \
+            --clobber

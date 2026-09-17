@@ -21,8 +21,11 @@ jobs:
 
       - name: Install Frontend Dependencies via NPM
         run: |
-          # npm install resolves peer dependency versions safely automatically
+          # 1. Force install base dependencies
           npm install --legacy-peer-deps
+          
+          # 2. Directly inject the missing plugin into the node ecosystem
+          npm install --save-dev @vitejs/plugin-react
 
       - name: Setup Tauri CLI & Build Web Assets
         run: |

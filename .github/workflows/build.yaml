@@ -1,6 +1,6 @@
 name: "Build CrossCode for iOS"
 on:
-  workflow_dispatch:
+  workflow_dispatch: manual
   release:
     types: [published]
 jobs:

@@ -1,6 +1,8 @@
 name: "Build CrossCode for iOS"
 on:
   workflow_dispatch:
+  release:
+    types: [published]
 jobs:
   build-ios:
     runs-on: macos-latest
@@ -48,6 +50,9 @@ jobs:
           bun-version: latest
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
+      # ----------------------------------------------------------
+      # Initialize Tauri iOS
+      # ----------------------------------------------------------
       - name: Initialize Tauri iOS
         run: |
           if [ ! -d "src-tauri/gen/apple" ]; then
@@ -56,7 +61,7 @@ jobs:
       # ----------------------------------------------------------
       # Build IPA
       # ----------------------------------------------------------
-           - name: Build iOS IPA
+      - name: Build iOS IPA
         run: |
           bunx tauri ios build --no-sign
       # ----------------------------------------------------------

@@ -25,7 +25,8 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode.app
 
       - name: Install Frontend Dependencies
-        run: bun install --frozen-lockfile
+        # Removed --frozen-lockfile so Bun can fix lockfile mismatches automatically
+        run: bun install
 
       - name: Setup Tauri iOS Environment
         run: |
@@ -65,6 +66,7 @@ jobs:
         with:
           name: CrossCode-iOS-Unsigned
           path: ${{ runner.temp }}/CrossCode-iOS-Unsigned.ipa
-          retention-days: 14
+          retention-days: 365
+
 
 

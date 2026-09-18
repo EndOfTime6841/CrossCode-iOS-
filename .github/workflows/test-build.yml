@@ -18,7 +18,9 @@ jobs:
 
       - name: Install Frontend Dependencies
         run: |
+          bun add -D @tauri-apps/cli@latest
           bun install
+
 
       - name: Install Rust Stable
         uses: dtolnay/rust-toolchain@stable
@@ -101,14 +103,8 @@ jobs:
         run: brew install vips
         
       - name: Run Tauri CLI
-        run: |
-          bun install
-          bunx tauri --version || (echo "Tauri CLI failed to resolve" && bun pm ls @tauri-apps/cli && exit 1)
+        run: bunx @tauri-apps/cli@latest --version
 
-
-      - name: Verify Tauri CLI
-        run: |
-          bunx tauri --version
 
       - name: Build Web Assets
         run: |
@@ -116,7 +112,8 @@ jobs:
 
       - name: Initialize Tauri iOS
         run: |
-          bunx tauri ios init --ci
+          bunx @tauri-apps/cli@latest ios init --ci
+
 
       - name: Install XcodeGen
         run: |

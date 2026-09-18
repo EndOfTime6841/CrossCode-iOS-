@@ -25,6 +25,12 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
+      - name: Refresh locked Tauri version
+        working-directory: src-tauri
+        run: |
+          cargo update -p tauri --precise 2.11.1
+          cargo tree -p tauri | head -n 20
+
       - name: Select Xcode
         run: |
           sudo xcode-select -s /Applications/Xcode.app

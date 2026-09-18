@@ -12,7 +12,7 @@
 
 [![Build CrossCode](https://github.com/nab138/CrossCode/actions/workflows/build.yml/badge.svg)](https://github.com/nab138/CrossCode/actions/workflows/build.yml)
 
-iOS Swift development IDE for Windows/Linux. Create, build, and test apps without owning a Mac.
+iOS Swift development IDE for IOS. (test) Create, build, and test apps without owning a computer.
 
 Supports Swift 6.2 and the Swift Package Manager.
 

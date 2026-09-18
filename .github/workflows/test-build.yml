@@ -9,7 +9,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -147,9 +147,8 @@ jobs:
           du -h "$IPA_PATH"
 
       - name: Upload Unsigned IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: CrossCode-iOS-Unsigned
           path: ${{ env.IPA_PATH }}
           retention-days: 14
-

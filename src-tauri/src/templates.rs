@@ -1,8 +1,40 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use dircpy::CopyBuilder;
 use tauri::{AppHandle, Manager};
+#[cfg(desktop)]
 use tauri_plugin_dialog::DialogExt;
+
+/// Resolves where a new project should be created.
+///
+/// On desktop, this asks the user to pick a folder via a native dialog,
+/// since `tauri-plugin-dialog`'s folder picker is desktop-only (iOS/Android
+/// don't expose an arbitrary "browse the filesystem" affordance the same
+/// way). On mobile, there's nothing to pick from outside the app's sandbox
+/// anyway, so we just use the app's Documents directory automatically.
+#[cfg(desktop)]
+fn resolve_project_location(app: &AppHandle) -> Result<PathBuf, String> {
+    let file_path = app
+        .dialog()
+        .file()
+        .set_title("Project Location")
+        .blocking_pick_folder();
+
+    let file_path = file_path.ok_or_else(|| "No folder selected".to_string())?;
+
+    file_path
+        .as_path()
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| "Selected folder path is not a local path".to_string())
+}
+
+#[cfg(not(desktop))]
+fn resolve_project_location(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .document_dir()
+        .map_err(|e| format!("Failed to resolve documents directory: {}", e))
+}
 
 #[tauri::command]
 pub async fn create_template(
@@ -19,16 +51,9 @@ pub async fn create_template(
     if !template_path.exists() {
         return Err(format!("Template '{}' does not exist", template));
     }
-    let file_path = app
-        .dialog()
-        .file()
-        .set_title("Project Location")
-        .blocking_pick_folder();
-    if file_path.is_none() {
-        return Err("No folder selected".to_string());
-    }
-    let file_path = file_path.unwrap();
-    let target_path = file_path.as_path().unwrap().join(&name);
+
+    let project_location = resolve_project_location(&app)?;
+    let target_path = project_location.join(&name);
     if target_path.exists() {
         return Err(format!(
             "Target path '{}' already exists",
@@ -92,3 +117,4 @@ pub async fn create_template(
 
     Ok(target_path.to_string_lossy().to_string())
 }
+

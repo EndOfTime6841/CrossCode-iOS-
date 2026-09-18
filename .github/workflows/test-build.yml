@@ -96,6 +96,12 @@ jobs:
             echo "ERROR: @vitejs/plugin-react is missing"
             exit 1
           fi
+      - name: Install Native Image Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install vips
+        
+      - name: Run Tauri CLI
+        run: bunx tauri --version
 
       - name: Verify Tauri CLI
         run: |

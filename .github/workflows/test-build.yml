@@ -114,7 +114,7 @@ jobs:
           # handshake only happens when 'tauri' is the parent process, which
           # is why calling `xcodebuild archive` directly (bypassing this)
           # made the script phase abort with a missing-addr-file panic.
-          bunx @tauri-apps/cli@latest ios build --release --no-sign --target aarch64
+          bunx @tauri-apps/cli@latest ios build --no-sign --target aarch64
 
       - name: Locate Built IPA
         shell: bash
@@ -152,5 +152,3 @@ jobs:
           name: CrossCode-iOS-Unsigned
           path: ${{ env.IPA_PATH }}
           retention-days: 14
-
-

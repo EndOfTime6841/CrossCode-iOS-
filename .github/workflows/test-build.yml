@@ -87,6 +87,7 @@ jobs:
 
       - name: Verify Vite React Plugin
         run: |
+          bun install 
           echo "Checking @vitejs/plugin-react..."
 
           if bun pm ls @vitejs/plugin-react; then

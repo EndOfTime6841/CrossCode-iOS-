@@ -101,7 +101,10 @@ jobs:
         run: brew install vips
         
       - name: Run Tauri CLI
-        run: bunx tauri --version
+      - run: |
+          bun install
+          bunx tauri --version || (echo "Tauri CLI failed to resolve" && bun pm ls @tauri-apps/cli && exit 1)
+
 
       - name: Verify Tauri CLI
         run: |

@@ -12,7 +12,7 @@
     "ios:build": "tauri ios build"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.9.0"
+    "@tauri-apps/api": "^2.9.0",
     "@codingame/esbuild-import-meta-url-plugin": "^1.0.2"
   },
   "devDependencies": {

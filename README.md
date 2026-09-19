@@ -22,9 +22,10 @@ https://github.com/user-attachments/assets/9cbe2b71-d765-46c6-aa25-ef16b539deec
 
 ## Installation
 
-CrossCode is currently in alpha. Expect bugs!
+CrossCode IOs is currently in pre alpha. won’t even work yet!
 
-Download the latest build for your platform from [releases](https://github.com/nab138/CrossCode/releases/latest).
+Download the latest build for your platform from [releases](https://github.com/nab138/CrossCode/releases/latest). 
+not even anything yet 
 
 Check out the [Getting Started](https://github.com/nab138/CrossCode/wiki#getting-started) section of the [wiki](https://github.com/nab138/CrossCode/wiki). Also, see [Troubleshooting](https://github.com/nab138/CrossCode/wiki/Troubleshooting) and [FAQ](https://github.com/nab138/CrossCode/wiki/FAQ)
 

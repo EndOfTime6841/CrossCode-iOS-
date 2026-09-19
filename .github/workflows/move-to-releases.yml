@@ -46,19 +46,28 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ steps.source.outputs.run_id }}
           path: artifact-download
-        # Note: this action already unpacks the artifact for you - what you
-        # get in artifact-download/ is the real .ipa file, not a .zip. The
-        # .zip only exists when a human downloads an artifact through the
-        # GitHub web UI.
 
-      - name: Locate IPA
+      - name: Extract IPA from downloaded artifact
         id: locate
         run: |
-          IPA_PATH=$(find artifact-download -maxdepth 3 -name "*.ipa" -print -quit)
+          echo "Downloaded artifact contents:"
+          find artifact-download -maxdepth 3 -type f
+
+          # download-artifact usually hands back the raw .ipa directly (the
+          # zip you see in the GitHub UI is only a browser-download wrapper
+          # that this action already unpacks). But just in case the artifact
+          # itself contains a .zip, unzip it here so either case works.
+          ZIP_PATH=$(find artifact-download -maxdepth 3 -name "*.zip" -print -quit)
+          if [ -n "$ZIP_PATH" ]; then
+            echo "Found a .zip inside the artifact, extracting: $ZIP_PATH"
+            mkdir -p artifact-download/extracted
+            unzip -o "$ZIP_PATH" -d artifact-download/extracted
+          fi
+
+          IPA_PATH=$(find artifact-download -maxdepth 4 -name "*.ipa" -print -quit)
           if [ -z "$IPA_PATH" ]; then
-            echo "ERROR: No .ipa found in downloaded artifact"
-            echo "Contents of artifact-download:"
-            find artifact-download -maxdepth 3 -type f
+            echo "ERROR: No .ipa found after extraction"
+            find artifact-download -maxdepth 4 -type f
             exit 1
           fi
           echo "Found IPA: $IPA_PATH"

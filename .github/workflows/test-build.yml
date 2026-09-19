@@ -25,6 +25,14 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
+      - name: Cache Cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          # Bump this if you ever need to force a clean cache (e.g. after a
+          # big dependency bump that seems to be serving stale artifacts).
+          prefix-key: "v1-rust"
+
       - name: Refresh locked Tauri version
         working-directory: src-tauri
         run: |

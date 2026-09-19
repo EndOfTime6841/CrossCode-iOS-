@@ -1,0 +1,83 @@
+name: Publish Unsigned IPA to Releases
+
+# Runs automatically right after "Build Unsigned CrossCode iOS IPA" finishes,
+# OR can be triggered manually against a specific past run's ID (handy if
+# you want to (re)publish an older successful build without re-running it).
+on:
+  workflow_run:
+    workflows: ["Build Unsigned CrossCode iOS IPA"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run ID of a successful 'Build Unsigned CrossCode iOS IPA' run to publish"
+        required: true
+        type: string
+
+jobs:
+  publish-release:
+    # For the automatic trigger, only proceed if the build actually succeeded.
+    # (workflow_dispatch has no such check - you're pointing at a run yourself.)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Resolve source run details
+        id: source
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run_id=${{ github.event.inputs.run_id }}" >> "$GITHUB_OUTPUT"
+            echo "tag=unsigned-build-manual-${{ github.event.inputs.run_id }}" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+            echo "tag=unsigned-build-${{ github.event.workflow_run.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download IPA artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CrossCode-iOS-Unsigned
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.source.outputs.run_id }}
+          path: artifact-download
+        # Note: this action already unpacks the artifact for you - what you
+        # get in artifact-download/ is the real .ipa file, not a .zip. The
+        # .zip only exists when a human downloads an artifact through the
+        # GitHub web UI.
+
+      - name: Locate IPA
+        id: locate
+        run: |
+          IPA_PATH=$(find artifact-download -maxdepth 3 -name "*.ipa" -print -quit)
+          if [ -z "$IPA_PATH" ]; then
+            echo "ERROR: No .ipa found in downloaded artifact"
+            echo "Contents of artifact-download:"
+            find artifact-download -maxdepth 3 -type f
+            exit 1
+          fi
+          echo "Found IPA: $IPA_PATH"
+          echo "ipa_path=$IPA_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.source.outputs.tag }}
+          name: "Unsigned Build (${{ steps.source.outputs.tag }})"
+          target_commitish: ${{ steps.source.outputs.sha }}
+          body: |
+            Automated unsigned iOS IPA build from commit `${{ steps.source.outputs.sha }}`.
+
+            This build is **unsigned** - install it via SideStore/AltStore or
+            your own signing/sideloading pipeline. Some features that rely on
+            desktop-only capabilities (see project notes) may not work.
+          files: ${{ steps.locate.outputs.ipa_path }}
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

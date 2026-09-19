@@ -45,6 +45,7 @@ use templates::create_template;
 use tokio::sync::Mutex;
 use windows::{has_wsl, install_wsl, is_windows};
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 fn main() {
     let _ = fix_path_env::fix();
 
@@ -171,3 +172,4 @@ fn open_devtools(app: tauri::AppHandle) -> Result<(), String> {
     app.get_webview_window("main").unwrap().open_devtools();
     Ok(())
 }
+

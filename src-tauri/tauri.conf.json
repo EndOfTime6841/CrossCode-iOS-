@@ -21,10 +21,7 @@
     ],
     "createUpdaterArtifacts": true,
     "iOS": {
-      "infoPlist": {
-        "UIFileSharingEnabled": true,
-        "LSSupportsOpeningDocumentsInPlace": true
-      }
+      "infoPlist": "Info.ios.plist"
     }
   },
   "productName": "CrossCode",

@@ -162,28 +162,40 @@ jobs:
           cd src-tauri/gen/apple
           WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -print -quit)
           PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" -print -quit)
+
           if [ -n "$WORKSPACE" ]; then
             WORKSPACE="${WORKSPACE#./}"
             echo "type=workspace" >> "$GITHUB_OUTPUT"
             echo "path=$WORKSPACE" >> "$GITHUB_OUTPUT"
-            echo "scheme=$(basename "$WORKSPACE" .xcworkspace)" >> "$GITHUB_OUTPUT"
-            echo "Detected workspace:"
-            echo "$WORKSPACE"
-            echo "Detected scheme:"
-            basename "$WORKSPACE" .xcworkspace
+            SCHEME_LIST=$(xcodebuild -workspace "$WORKSPACE" -list -json)
           elif [ -n "$PROJECT" ]; then
             PROJECT="${PROJECT#./}"
             echo "type=project" >> "$GITHUB_OUTPUT"
             echo "path=$PROJECT" >> "$GITHUB_OUTPUT"
-            echo "scheme=$(basename "$PROJECT" .xcodeproj)" >> "$GITHUB_OUTPUT"
-            echo "Detected project:"
-            echo "$PROJECT"
-            echo "Detected scheme:"
-            basename "$PROJECT" .xcodeproj
+            SCHEME_LIST=$(xcodebuild -project "$PROJECT" -list -json)
           else
             echo "ERROR: No Xcode workspace or project found"
             exit 1
           fi
+
+          echo "Raw scheme list:"
+          echo "$SCHEME_LIST"
+
+          # Prefer a scheme ending in _iOS (Tauri's convention), else fall back to the first scheme
+          SCHEME=$(echo "$SCHEME_LIST" | ruby -rjson -e '
+            data = JSON.parse(STDIN.read)
+            schemes = data["project"]["schemes"] rescue data["workspace"]["schemes"]
+            picked = schemes.find { |s| s.end_with?("_iOS") } || schemes.first
+            puts picked
+          ')
+
+          if [ -z "$SCHEME" ]; then
+            echo "ERROR: Could not determine a scheme"
+            exit 1
+          fi
+
+          echo "Detected scheme: $SCHEME"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
 
       - name: List Xcode Schemes
         shell: bash

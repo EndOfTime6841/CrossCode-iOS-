@@ -6,10 +6,9 @@ on:
 jobs:
   build-crosscode-ios:
     runs-on: macos-latest
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -25,23 +24,15 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
-      - name: Cache Cargo registry and build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "src-tauri -> target"
-          # Bump this if you ever need to force a clean cache (e.g. after a
-          # big dependency bump that seems to be serving stale artifacts).
-          prefix-key: "v1-rust"
-
-      - name: Refresh locked Tauri version
-        working-directory: src-tauri
-        run: |
-          cargo update -p tauri --precise 2.11.1
-          cargo tree -p tauri | head -n 20
-
       - name: Select Xcode
         run: |
           sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install Swift toolchain
+        run: |
+          curl -fsSL https://download.swift.org/swift-6.2-release/xcode/swift-6.2-RELEASE/swift-6.2-RELEASE-osx.pkg -o swift.pkg
+          sudo installer -pkg swift.pkg -target /
+          echo "TOOLCHAINS=swift" >> "$GITHUB_ENV"
 
       - name: Verify Toolchains
         run: |
@@ -60,6 +51,10 @@ jobs:
           echo "=============================="
           xcodebuild -version
           xcode-select -p
+          echo "=============================="
+          echo "Swift"
+          echo "=============================="
+          swift --version
           echo "=============================="
           echo "iOS SDK"
           echo "=============================="
@@ -106,7 +101,11 @@ jobs:
         run: brew install vips
 
       - name: Run Tauri CLI
-        run: bunx @tauri-apps/cli@latest --version
+        run: bunx tauri --version
+
+      - name: Verify Tauri CLI
+        run: |
+          bunx tauri --version
 
       - name: Build Web Assets
         run: |
@@ -114,41 +113,224 @@ jobs:
 
       - name: Initialize Tauri iOS
         run: |
-          bunx @tauri-apps/cli@latest ios init --ci
+          bunx tauri ios init --ci
 
-      - name: Build Unsigned iOS IPA (via Tauri CLI)
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen
+
+      - name: Generate Xcode Project
         shell: bash
         run: |
-          echo "=============================="
-          echo "Building unsigned iOS IPA"
-          echo "=============================="
-          # Let the Tauri CLI itself drive xcodebuild. It starts a local
-          # control server and writes its address to a temp file that the
-          # Xcode 'Build Rust Code' script phase reads back over IPC - that
-          # handshake only happens when 'tauri' is the parent process, which
-          # is why calling `xcodebuild archive` directly (bypassing this)
-          # made the script phase abort with a missing-addr-file panic.
-          bunx @tauri-apps/cli@latest ios build --no-sign --target aarch64
-
-      - name: Locate Built IPA
-        shell: bash
-        run: |
-          IPA_PATH=$(find src-tauri/gen/apple -maxdepth 4 -name "*.ipa" -print -quit)
-          if [ -z "$IPA_PATH" ]; then
-            echo "ERROR: No .ipa found under src-tauri/gen/apple"
-            echo "Searched tree:"
-            find src-tauri/gen/apple -maxdepth 4 -type f | sort
+          if [ ! -d "src-tauri/gen/apple" ]; then
+            echo "ERROR: src-tauri/gen/apple does not exist"
             exit 1
           fi
-          echo "Found IPA:"
-          echo "$IPA_PATH"
-          echo "IPA_PATH=$IPA_PATH" >> "$GITHUB_ENV"
+          cd src-tauri/gen/apple
+          echo "Current directory:"
+          pwd
+          echo "Files:"
+          find . -maxdepth 2 -type f | sort
+          if [ -f project.yml ]; then
+            echo "project.yml found"
+            echo "Generating Xcode project..."
+            xcodegen generate
+          else
+            echo "No project.yml found"
+            echo "Using Tauri-generated Xcode project"
+          fi
+
+      - name: Inspect Generated iOS Project
+        shell: bash
+        run: |
+          cd src-tauri/gen/apple
+          echo "=============================="
+          echo "Generated iOS files"
+          echo "=============================="
+          find . -maxdepth 3 \
+            \( \
+              -name "*.xcodeproj" \
+              -o -name "*.xcworkspace" \
+              -o -name "project.yml" \
+            \) \
+            -print
+
+      - name: Detect Xcode Workspace or Project
+        id: xcode
+        shell: bash
+        run: |
+          cd src-tauri/gen/apple
+          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -print -quit)
+          PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" -print -quit)
+          if [ -n "$WORKSPACE" ]; then
+            WORKSPACE="${WORKSPACE#./}"
+            echo "type=workspace" >> "$GITHUB_OUTPUT"
+            echo "path=$WORKSPACE" >> "$GITHUB_OUTPUT"
+            echo "scheme=$(basename "$WORKSPACE" .xcworkspace)" >> "$GITHUB_OUTPUT"
+            echo "Detected workspace:"
+            echo "$WORKSPACE"
+            echo "Detected scheme:"
+            basename "$WORKSPACE" .xcworkspace
+          elif [ -n "$PROJECT" ]; then
+            PROJECT="${PROJECT#./}"
+            echo "type=project" >> "$GITHUB_OUTPUT"
+            echo "path=$PROJECT" >> "$GITHUB_OUTPUT"
+            echo "scheme=$(basename "$PROJECT" .xcodeproj)" >> "$GITHUB_OUTPUT"
+            echo "Detected project:"
+            echo "$PROJECT"
+            echo "Detected scheme:"
+            basename "$PROJECT" .xcodeproj
+          else
+            echo "ERROR: No Xcode workspace or project found"
+            exit 1
+          fi
+
+      - name: List Xcode Schemes
+        shell: bash
+        run: |
+          cd src-tauri/gen/apple
+          echo "=============================="
+          echo "Available Xcode schemes"
+          echo "=============================="
+          if [ "${{ steps.xcode.outputs.type }}" = "workspace" ]; then
+            xcodebuild \
+              -workspace "${{ steps.xcode.outputs.path }}" \
+              -list
+          else
+            xcodebuild \
+              -project "${{ steps.xcode.outputs.path }}" \
+              -list
+          fi
+
+      - name: Build Unsigned iOS Archive
+        shell: bash
+        run: |
+          cd src-tauri/gen/apple
+          ARCHIVE_PATH="$RUNNER_TEMP/CrossCode.xcarchive"
+          echo "=============================="
+          echo "Building unsigned archive"
+          echo "=============================="
+          echo "Archive:"
+          echo "$ARCHIVE_PATH"
+          if [ "${{ steps.xcode.outputs.type }}" = "workspace" ]; then
+            xcodebuild archive \
+              -workspace "${{ steps.xcode.outputs.path }}" \
+              -scheme "${{ steps.xcode.outputs.scheme }}" \
+              -archivePath "$ARCHIVE_PATH" \
+              -sdk iphoneos \
+              -configuration Release \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              PROVISIONING_PROFILE_SPECIFIER=""
+          else
+            xcodebuild archive \
+              -project "${{ steps.xcode.outputs.path }}" \
+              -scheme "${{ steps.xcode.outputs.scheme }}" \
+              -archivePath "$ARCHIVE_PATH" \
+              -sdk iphoneos \
+              -configuration Release \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              PROVISIONING_PROFILE_SPECIFIER=""
+          fi
+
+      - name: Inspect Archive
+        shell: bash
+        run: |
+          ARCHIVE_PATH="$RUNNER_TEMP/CrossCode.xcarchive"
+          echo "=============================="
+          echo "Archive contents"
+          echo "=============================="
+          find "$ARCHIVE_PATH" \
+            -maxdepth 6 \
+            -print | head -300
+          echo "=============================="
+          echo "Applications"
+          echo "=============================="
+          find "$ARCHIVE_PATH/Products/Applications" \
+            -maxdepth 2 \
+            -name "*.app" \
+            -type d \
+            -print
+
+      - name: Locate Built App
+        shell: bash
+        run: |
+          APP_PATH=$(find \
+            "$RUNNER_TEMP/CrossCode.xcarchive/Products/Applications" \
+            -maxdepth 2 \
+            -name "*.app" \
+            -type d \
+            -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found in archive"
+            exit 1
+          fi
+          echo "Found application:"
+          echo "$APP_PATH"
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+
+      - name: Verify App Bundle
+        shell: bash
+        run: |
+          echo "=============================="
+          echo "Application"
+          echo "=============================="
+          ls -lah "$APP_PATH"
+          echo "=============================="
+          echo "Info.plist"
+          echo "=============================="
+          if [ -f "$APP_PATH/Info.plist" ]; then
+            echo "Bundle identifier:"
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleIdentifier" \
+              "$APP_PATH/Info.plist" || true
+            echo "Display name:"
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleDisplayName" \
+              "$APP_PATH/Info.plist" || true
+            echo "Version:"
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleShortVersionString" \
+              "$APP_PATH/Info.plist" || true
+            echo "Build:"
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleVersion" \
+              "$APP_PATH/Info.plist" || true
+          else
+            echo "ERROR: Info.plist not found"
+            exit 1
+          fi
+
+      - name: Package Unsigned IPA
+        shell: bash
+        run: |
+          PAYLOAD_DIR="$RUNNER_TEMP/Payload"
+          IPA_PATH="$RUNNER_TEMP/CrossCode-iOS-Unsigned.ipa"
+          echo "=============================="
+          echo "Packaging IPA"
+          echo "=============================="
+          rm -rf "$PAYLOAD_DIR"
+          rm -f "$IPA_PATH"
+          mkdir -p "$PAYLOAD_DIR"
+          cp -R "$APP_PATH" "$PAYLOAD_DIR/"
+          cd "$RUNNER_TEMP"
+          zip -r \
+            "$IPA_PATH" \
+            Payload
+          echo "=============================="
+          echo "Created IPA"
+          echo "=============================="
+          ls -lh "$IPA_PATH"
 
       - name: Verify IPA
         shell: bash
         run: |
+          IPA_PATH="$RUNNER_TEMP/CrossCode-iOS-Unsigned.ipa"
           if [ ! -f "$IPA_PATH" ]; then
-            echo "ERROR: IPA path does not exist: $IPA_PATH"
+            echo "ERROR: IPA was not created"
             exit 1
           fi
           echo "=============================="
@@ -161,8 +343,9 @@ jobs:
           du -h "$IPA_PATH"
 
       - name: Upload Unsigned IPA
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: CrossCode-iOS-Unsigned
-          path: ${{ env.IPA_PATH }}
+          path: ${{ runner.temp }}/CrossCode-iOS-Unsigned.ipa
           retention-days: 14
+

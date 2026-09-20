@@ -28,10 +28,21 @@ jobs:
         run: |
           sudo xcode-select -s /Applications/Xcode.app
 
+      - name: Cache Swift toolchain
+        id: swift-cache
+        uses: actions/cache@v4
+        with:
+          path: /Library/Developer/Toolchains
+          key: swift-toolchain-6.2-macos-${{ runner.arch }}
+
       - name: Install Swift toolchain
+        if: steps.swift-cache.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://download.swift.org/swift-6.2-release/xcode/swift-6.2-RELEASE/swift-6.2-RELEASE-osx.pkg -o swift.pkg
           sudo installer -pkg swift.pkg -target /
+
+      - name: Select Swift toolchain
+        run: |
           echo "TOOLCHAINS=swift" >> "$GITHUB_ENV"
 
       - name: Verify Toolchains
@@ -107,6 +118,10 @@ jobs:
         run: |
           bunx tauri --version
 
+      - name: Print Tauri iOS Build Help
+        run: |
+          bunx tauri ios build --help
+
       - name: Build Web Assets
         run: |
           bun run build
@@ -119,165 +134,25 @@ jobs:
         run: |
           brew install xcodegen
 
-      - name: Generate Xcode Project
+      - name: Build iOS App (Unsigned)
         shell: bash
+        env:
+          CI: "true"
         run: |
-          if [ ! -d "src-tauri/gen/apple" ]; then
-            echo "ERROR: src-tauri/gen/apple does not exist"
-            exit 1
-          fi
-          cd src-tauri/gen/apple
-          echo "Current directory:"
-          pwd
-          echo "Files:"
-          find . -maxdepth 2 -type f | sort
-          if [ -f project.yml ]; then
-            echo "project.yml found"
-            echo "Generating Xcode project..."
-            xcodegen generate
-          else
-            echo "No project.yml found"
-            echo "Using Tauri-generated Xcode project"
-          fi
-
-      - name: Inspect Generated iOS Project
-        shell: bash
-        run: |
-          cd src-tauri/gen/apple
-          echo "=============================="
-          echo "Generated iOS files"
-          echo "=============================="
-          find . -maxdepth 3 \
-            \( \
-              -name "*.xcodeproj" \
-              -o -name "*.xcworkspace" \
-              -o -name "project.yml" \
-            \) \
-            -print
-
-      - name: Detect Xcode Workspace or Project
-        id: xcode
-        shell: bash
-        run: |
-          cd src-tauri/gen/apple
-          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -print -quit)
-          PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" -print -quit)
-
-          if [ -n "$WORKSPACE" ]; then
-            WORKSPACE="${WORKSPACE#./}"
-            echo "type=workspace" >> "$GITHUB_OUTPUT"
-            echo "path=$WORKSPACE" >> "$GITHUB_OUTPUT"
-            SCHEME_LIST=$(xcodebuild -workspace "$WORKSPACE" -list -json)
-          elif [ -n "$PROJECT" ]; then
-            PROJECT="${PROJECT#./}"
-            echo "type=project" >> "$GITHUB_OUTPUT"
-            echo "path=$PROJECT" >> "$GITHUB_OUTPUT"
-            SCHEME_LIST=$(xcodebuild -project "$PROJECT" -list -json)
-          else
-            echo "ERROR: No Xcode workspace or project found"
-            exit 1
-          fi
-
-          echo "Raw scheme list:"
-          echo "$SCHEME_LIST"
-
-          # Prefer a scheme ending in _iOS (Tauri's convention), else fall back to the first scheme
-          SCHEME=$(echo "$SCHEME_LIST" | ruby -rjson -e '
-            data = JSON.parse(STDIN.read)
-            schemes = data["project"]["schemes"] rescue data["workspace"]["schemes"]
-            picked = schemes.find { |s| s.end_with?("_iOS") } || schemes.first
-            puts picked
-          ')
-
-          if [ -z "$SCHEME" ]; then
-            echo "ERROR: Could not determine a scheme"
-            exit 1
-          fi
-
-          echo "Detected scheme: $SCHEME"
-          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
-
-      - name: List Xcode Schemes
-        shell: bash
-        run: |
-          cd src-tauri/gen/apple
-          echo "=============================="
-          echo "Available Xcode schemes"
-          echo "=============================="
-          if [ "${{ steps.xcode.outputs.type }}" = "workspace" ]; then
-            xcodebuild \
-              -workspace "${{ steps.xcode.outputs.path }}" \
-              -list
-          else
-            xcodebuild \
-              -project "${{ steps.xcode.outputs.path }}" \
-              -list
-          fi
-
-      - name: Build Unsigned iOS Archive
-        shell: bash
-        run: |
-          cd src-tauri/gen/apple
-          ARCHIVE_PATH="$RUNNER_TEMP/CrossCode.xcarchive"
-          echo "=============================="
-          echo "Building unsigned archive"
-          echo "=============================="
-          echo "Archive:"
-          echo "$ARCHIVE_PATH"
-          if [ "${{ steps.xcode.outputs.type }}" = "workspace" ]; then
-            xcodebuild archive \
-              -workspace "${{ steps.xcode.outputs.path }}" \
-              -scheme "${{ steps.xcode.outputs.scheme }}" \
-              -archivePath "$ARCHIVE_PATH" \
-              -sdk iphoneos \
-              -configuration Release \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGN_IDENTITY="" \
-              PROVISIONING_PROFILE_SPECIFIER=""
-          else
-            xcodebuild archive \
-              -project "${{ steps.xcode.outputs.path }}" \
-              -scheme "${{ steps.xcode.outputs.scheme }}" \
-              -archivePath "$ARCHIVE_PATH" \
-              -sdk iphoneos \
-              -configuration release \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGN_IDENTITY="" \
-              PROVISIONING_PROFILE_SPECIFIER=""
-          fi
-
-      - name: Inspect Archive
-        shell: bash
-        run: |
-          ARCHIVE_PATH="$RUNNER_TEMP/CrossCode.xcarchive"
-          echo "=============================="
-          echo "Archive contents"
-          echo "=============================="
-          find "$ARCHIVE_PATH" \
-            -maxdepth 6 \
-            -print | head -300
-          echo "=============================="
-          echo "Applications"
-          echo "=============================="
-          find "$ARCHIVE_PATH/Products/Applications" \
-            -maxdepth 2 \
-            -name "*.app" \
-            -type d \
-            -print
+          bunx tauri ios build --target aarch64 --verbose
 
       - name: Locate Built App
         shell: bash
         run: |
           APP_PATH=$(find \
-            "$RUNNER_TEMP/CrossCode.xcarchive/Products/Applications" \
-            -maxdepth 2 \
+            src-tauri/gen/apple \
+            -maxdepth 6 \
             -name "*.app" \
             -type d \
             -print -quit)
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found in archive"
+            echo "ERROR: No .app found after tauri ios build"
+            find src-tauri/gen/apple -maxdepth 6 -print
             exit 1
           fi
           echo "Found application:"
@@ -360,4 +235,5 @@ jobs:
           name: CrossCode-iOS-Unsigned
           path: ${{ runner.temp }}/CrossCode-iOS-Unsigned.ipa
           retention-days: 14
+
 

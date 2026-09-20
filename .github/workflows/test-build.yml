@@ -139,7 +139,7 @@ jobs:
         env:
           CI: "true"
         run: |
-          bunx tauri ios build --target aarch64 --verbose
+          bunx tauri ios build --target aarch64 --no-sign --verbose
 
       - name: Locate Built App
         shell: bash

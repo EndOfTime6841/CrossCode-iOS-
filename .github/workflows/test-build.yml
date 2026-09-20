@@ -241,7 +241,7 @@ jobs:
               -scheme "${{ steps.xcode.outputs.scheme }}" \
               -archivePath "$ARCHIVE_PATH" \
               -sdk iphoneos \
-              -configuration Release \
+              -configuration release \
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGN_IDENTITY="" \

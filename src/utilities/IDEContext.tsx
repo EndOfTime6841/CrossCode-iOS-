@@ -28,13 +28,16 @@ import { Operation, OperationState, OperationUpdate } from "./operations";
 import OperationView from "../components/OperationView";
 import { UpdateContext } from "./UpdateContext";
 import { isCompatable } from "../components/SwiftMenu";
+import { platform } from "@tauri-apps/plugin-os";
 
 let isMainWindow = getCurrentWindow().label === "main";
+const isIOS = platform() === "ios";
 
 export interface IDEContextType {
   initialized: boolean;
   ready: boolean | null;
   isWindows: boolean;
+  isIOS: boolean;
   hasWSL: boolean;
   hasDarwinSDK: boolean;
   darwinSDKVersion: string;
@@ -234,6 +237,10 @@ export const IDEProvider: React.FC<{
 
   useEffect(() => {
     if (!initialized) return setReady(null);
+    if (isIOS) {
+      setReady(true);
+      return;
+    }
     if (toolchains !== null && isWindows !== null && hasWSL !== null) {
       setReady(
         selectedToolchain !== null &&
@@ -251,6 +258,7 @@ export const IDEProvider: React.FC<{
     isWindows,
     hasDarwinSDK,
     initialized,
+    isIOS,
   ]);
 
   let startedInitializing = useRef(false);
@@ -493,6 +501,7 @@ export const IDEProvider: React.FC<{
   const contextValue = useMemo(
     () => ({
       isWindows,
+      isIOS,
       hasWSL,
       toolchains,
       initialized,
@@ -518,6 +527,7 @@ export const IDEProvider: React.FC<{
     }),
     [
       isWindows,
+      isIOS,
       hasWSL,
       toolchains,
       initialized,

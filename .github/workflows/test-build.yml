@@ -133,6 +133,12 @@ jobs:
       - name: Install XcodeGen
         run: |
           brew install xcodegen
+      - name: Regenerate Cargo.lock
+        working-directory: src-tauri
+        run: |
+          cargo update -p idevice --precise 0.1.47
+          cargo update -p isideload --precise 0.1.17
+          cargo tree -p idevice -p isideload
 
       - name: Build iOS App (Unsigned)
         shell: bash

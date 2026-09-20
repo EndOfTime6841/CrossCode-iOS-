@@ -234,6 +234,20 @@ jobs:
           echo "IPA size"
           echo "=============================="
           du -h "$IPA_PATH"
+      - name: Verify Info.plist keys
+        shell: bash
+        run: |
+          echo "=============================="
+          echo "Full Info.plist dump"
+          echo "=============================="
+          /usr/libexec/PlistBuddy -c "Print" "$APP_PATH/Info.plist"
+          echo "=============================="
+          echo "Checking specific keys"
+          echo "=============================="
+          /usr/libexec/PlistBuddy -c "Print :UIFileSharingEnabled" "$APP_PATH/Info.plist" || echo "UIFileSharingEnabled: MISSING"
+          /usr/libexec/PlistBuddy -c "Print :LSSupportsOpeningDocumentsInPlace" "$APP_PATH/Info.plist" || echo "LSSupportsOpeningDocumentsInPlace: MISSING"
+
+    
 
       - name: Upload Unsigned IPA
         uses: actions/upload-artifact@v4

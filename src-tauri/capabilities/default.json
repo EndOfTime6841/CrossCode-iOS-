@@ -1,0 +1,15 @@
+{
+  "identifier": "default",
+  "windows": ["main"],
+  "permissions": [
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-mkdir",
+    "fs:allow-read-dir",
+    "fs:allow-exists",
+    {
+      "identifier": "fs:scope",
+      "allow": ["$DOCUMENT/**"]
+    }
+  ]
+}

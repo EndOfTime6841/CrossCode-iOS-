@@ -252,7 +252,7 @@ jobs:
       - name: Upload Unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: CrossCode-iOS-Unsigned
+          name: me.navdeb.crosscode
           path: ${{ runner.temp }}/CrossCode-iOS-Unsigned.ipa
           retention-days: 14
 

@@ -41,7 +41,7 @@ jobs:
       - name: Download IPA artifact
         uses: actions/download-artifact@v4
         with:
-          name: me.nabdev.crosscode
+          name: me.navdeb.crosscode
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           run-id: ${{ steps.source.outputs.run_id }}
@@ -72,6 +72,20 @@ jobs:
           fi
           echo "Found IPA: $IPA_PATH"
           echo "ipa_path=$IPA_PATH" >> "$GITHUB_OUTPUT"
+      - name: Rename IPA
+        shell: bash
+        run: |
+          mv "$RUNNER_TEMP/CrossCode-iOS-Unsigned.ipa" "$RUNNER_TEMP/me.nabdev.crosscode.ipa"
+
+      - name: Upload Unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrossCode-iOS-Unsigned
+          path: ${{ runner.temp }}/me.nabdev.crosscode.ipa
+          retention-days: 14
+
+          
+       
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

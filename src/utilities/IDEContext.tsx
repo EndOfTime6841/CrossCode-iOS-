@@ -704,7 +704,7 @@ export const IDEProvider: React.FC<{
       )}
     </IDEContext.Provider>
   );
-};
+});
 
 export const useIDE = () => {
   const context = React.useContext(IDEContext);
@@ -713,3 +713,4 @@ export const useIDE = () => {
   }
   return context;
 };
+}

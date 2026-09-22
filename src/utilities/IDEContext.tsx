@@ -29,7 +29,7 @@ import OperationView from "../components/OperationView";
 import { UpdateContext } from "./UpdateContext";
 import { isCompatable } from "../components/SwiftMenu";
 import { platform } from "@tauri-apps/plugin-os";
-import { open } from "@tauri-apps/plugin-dialog";
+
 
 
 let isMainWindow = getCurrentWindow().label === "main";

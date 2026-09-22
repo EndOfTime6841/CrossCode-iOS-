@@ -201,7 +201,7 @@ jobs:
         shell: bash
         run: |
           PAYLOAD_DIR="$RUNNER_TEMP/Payload"
-          IPA_PATH="$RUNNER_TEMP/CrossCode-iOS-Unsigned.ipa"
+          IPA_PATH="$RUNNER_TEMP/me.nabdev.crosscode.ipa"
           echo "=============================="
           echo "Packaging IPA"
           echo "=============================="
@@ -221,7 +221,7 @@ jobs:
       - name: Verify IPA
         shell: bash
         run: |
-          IPA_PATH="$RUNNER_TEMP/CrossCode-iOS-Unsigned.ipa"
+          IPA_PATH="$RUNNER_TEMP/me.nabdev.crosscode.ipa"
           if [ ! -f "$IPA_PATH" ]; then
             echo "ERROR: IPA was not created"
             exit 1

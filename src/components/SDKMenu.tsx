@@ -29,7 +29,7 @@ export default () => {
       multiple: false,
       filters: [
         {
-          name: "XCode",
+          name: "",
           extensions: ["xip"],
         },
       ],

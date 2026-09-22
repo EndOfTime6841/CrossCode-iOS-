@@ -15,6 +15,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useToast } from "react-toast-plus";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { SWIFT_VERSION_PREFIX } from "../utilities/constants";
+import ErrorBoundary from "../components/ErrorBoundary";
+
 
 export interface OnboardingProps {}
 
@@ -240,35 +242,34 @@ export default ({}: OnboardingProps) => {
             </CardContent>
           </Card>
         )}
-        <Card variant="soft">
-          <Typography level="h3">Swift</Typography>
-          <Typography level="body-sm">
-            You will need a Swift {SWIFT_VERSION_PREFIX} toolchain to use
-            CrossCode. It is recommended to install it using swiftly, but you
-            can also install it manually.
-          </Typography>
-          <Divider />
-          <CardContent>
-            <SwiftMenu />
-          </CardContent>
-        </Card>
-        <Card variant="soft" id="install-sdk">
-          <Typography level="h3">Darwin SDK</Typography>
-          <Typography level="body-sm">
-            CrossCode requires a special swift SDK to build apps for iOS. It can
-            be generated from a copy of Xcode 26 or later. To install it,
-            download Xcode.xip using the link below, click the "Install SDK"
-            button, then select the downloaded file. Note that installing the
-            SDK will temporarily require a lot of disk space (~11GB) and may
-            take a while.
-          </Typography>
-          <Divider />
-          <CardContent>
-            <SDKMenu />
-          </CardContent>
-        </Card>
-      </div>
-      <div style={{ width: 0, height: 0 }} ref={darwinSdkRef}></div>
-    </div>
-  );
-};
+  <ErrorBoundary label="Swift card">
+  <Card variant="soft">
+    <Typography level="h3">Swift</Typography>
+    <Typography level="body-sm">
+      You will need a Swift {SWIFT_VERSION_PREFIX} toolchain to use
+      CrossCode. It is recommended to install it using swiftly, but you
+      can also install it manually.
+    </Typography>
+    <Divider />
+    <CardContent>
+      <SwiftMenu />
+    </CardContent>
+  </Card>
+</ErrorBoundary>
+<ErrorBoundary label="Darwin SDK card">
+  <Card variant="soft" id="install-sdk">
+    <Typography level="h3">Darwin SDK</Typography>
+    <Typography level="body-sm">
+      CrossCode requires a special swift SDK to build apps for iOS. It can
+      be generated from a copy of Xcode 26 or later. To install it,
+      download Xcode.xip using the link below, click the "Install SDK"
+      button, then select the downloaded file. Note that installing the
+      SDK will temporarily require a lot of disk space (~11GB) and may
+      take a while.
+    </Typography>
+    <Divider />
+    <CardContent>
+      <SDKMenu />
+    </CardContent>
+  </Card>
+</ErrorBoundary>

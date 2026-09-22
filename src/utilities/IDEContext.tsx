@@ -29,6 +29,8 @@ import OperationView from "../components/OperationView";
 import { UpdateContext } from "./UpdateContext";
 import { isCompatable } from "../components/SwiftMenu";
 import { platform } from "@tauri-apps/plugin-os";
+import { open } from "@tauri-apps/plugin-dialog";
+
 
 let isMainWindow = getCurrentWindow().label === "main";
 const isIOS = platform() === "ios";
@@ -192,32 +194,49 @@ export const IDEProvider: React.FC<{
     });
   }, []);
 
-  const locateToolchain = useCallback(async () => {
-    let path = await dialog.open({
-      directory: true,
-      multiple: false,
-    });
-    if (!path) {
-      addToast.error("No path selected");
-      return;
-    }
-    if (!(await invoke("validate_toolchain", { toolchainPath: path }))) {
-      if (isWindows) {
-        if (path?.startsWith("\\\\wsl.localhost\\")) {
-          path = path.replace("\\\\wsl.localhost\\", "\\\\wsl$\\");
-        }
-        path = await invoke<string>("linux_path", {
-          path,
-        });
-        if (!(await invoke("validate_toolchain", { toolchainPath: path }))) {
-          addToast.error("Invalid toolchain path");
-          return;
-        }
-      } else {
+    const locateToolchain = useCallback(async () => {
+  let path = await dialog.open({
+    directory: true,
+    multiple: false,
+  });
+  if (!path) {
+    addToast.error("No path selected");
+    return;
+  }
+  if (!(await invoke("validate_toolchain", { toolchainPath: path }))) {
+    if (isWindows) {
+      if (path?.startsWith("\\\\wsl.localhost\\")) {
+        path = path.replace("\\\\wsl.localhost\\", "\\\\wsl$\\");
+      }
+      path = await invoke<string>("linux_path", {
+        path,
+      });
+      if (!(await invoke("validate_toolchain", { toolchainPath: path }))) {
         addToast.error("Invalid toolchain path");
         return;
       }
+    } else {
+      addToast.error("Invalid toolchain path");
+      return;
     }
+  }
+  const info = await invoke<Toolchain>("get_toolchain_info", {
+    toolchainPath: path,
+    isSwiftly: false,
+  }).catch((error) => {
+    console.error("Error getting toolchain info:", error);
+    addToast.error("Failed to get toolchain info");
+    return null;
+  });
+  if (!info) {
+    addToast.error("Invalid toolchain path or version not found");
+    return;
+  }
+  if (info) {
+    setSelectedToolchain(info);
+  }
+}, [isWindows]);
+
     const info = await invoke<Toolchain>("get_toolchain_info", {
       toolchainPath: path,
       isSwiftly: false,

@@ -30,8 +30,6 @@ import { UpdateContext } from "./UpdateContext";
 import { isCompatable } from "../components/SwiftMenu";
 import { platform } from "@tauri-apps/plugin-os";
 
-
-
 let isMainWindow = getCurrentWindow().label === "main";
 const isIOS = platform() === "ios";
 
@@ -194,49 +192,74 @@ export const IDEProvider: React.FC<{
     });
   }, []);
 
-        const locateToolchain = useCallback(async () => {
-  let path = await dialog.open({
-    directory: true,
-    multiple: false,
-  });
-  if (!path) {
-    addToast.error("No path selected");
-    return;
-  }
-  if (!(await invoke("validate_toolchain", { toolchainPath: path }))) {
-    if (isWindows) {
-      if (path?.startsWith("\\\\wsl.localhost\\")) {
-        path = path.replace("\\\\wsl.localhost\\", "\\\\wsl$\\");
-      }
-      path = await invoke<string>("linux_path", {
-        path,
+  const locateToolchain = useCallback(async () => {
+    let path: string | null;
+    if (isIOS) {
+      // Directory selection isn't supported by the dialog plugin on
+      // mobile, so ask the user to pick the "swift" binary itself
+      // (inside <toolchain>/usr/bin/swift) and derive the toolchain
+      // root from that file's location.
+      let filePath = await dialog.open({
+        directory: false,
+        multiple: false,
       });
-      if (!(await invoke("validate_toolchain", { toolchainPath: path }))) {
-        addToast.error("Invalid toolchain path");
+      if (!filePath) {
+        addToast.error("No file selected");
+        return;
+      }
+      const parts = filePath.split("/").filter((p) => p.length > 0);
+      // Expecting .../usr/bin/swift -> strip "bin" and "swift" and "usr"
+      if (parts.length >= 3) {
+        path = "/" + parts.slice(0, parts.length - 3).join("/");
+      } else {
+        addToast.error(
+          "Selected file is not inside a valid toolchain structure"
+        );
         return;
       }
     } else {
-      addToast.error("Invalid toolchain path");
+      path = await dialog.open({
+        directory: true,
+        multiple: false,
+      });
+    }
+    if (!path) {
+      addToast.error("No path selected");
       return;
     }
-  }
-  const info = await invoke<Toolchain>("get_toolchain_info", {
-    toolchainPath: path,
-    isSwiftly: false,
-  }).catch((error) => {
-    console.error("Error getting toolchain info:", error);
-    addToast.error("Failed to get toolchain info");
-    return null;
-  });
-  if (!info) {
-    addToast.error("Invalid toolchain path or version not found");
-    return;
-  }
-  if (info) {
-    setSelectedToolchain(info);
-  }
-}, [isWindows]);
-
+    if (!(await invoke("validate_toolchain", { toolchainPath: path }))) {
+      if (isWindows) {
+        if (path?.startsWith("\\\\wsl.localhost\\")) {
+          path = path.replace("\\\\wsl.localhost\\", "\\\\wsl$\\");
+        }
+        path = await invoke<string>("linux_path", {
+          path,
+        });
+        if (!(await invoke("validate_toolchain", { toolchainPath: path }))) {
+          addToast.error("Invalid toolchain path");
+          return;
+        }
+      } else {
+        addToast.error("Invalid toolchain path");
+        return;
+      }
+    }
+    const info = await invoke<Toolchain>("get_toolchain_info", {
+      toolchainPath: path,
+      isSwiftly: false,
+    }).catch((error) => {
+      console.error("Error getting toolchain info:", error);
+      addToast.error("Failed to get toolchain info");
+      return null;
+    });
+    if (!info) {
+      addToast.error("Invalid toolchain path or version not found");
+      return;
+    }
+    if (info) {
+      setSelectedToolchain(info);
+    }
+  }, [isWindows]);
 
   useEffect(() => {
     if (!initialized) return setReady(null);

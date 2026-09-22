@@ -15,9 +15,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { useToast } from "react-toast-plus";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { SWIFT_VERSION_PREFIX } from "../utilities/constants";
-import { open } from "@tauri-apps/plugin-dialog";
-
-
 
 export interface OnboardingProps {}
 
@@ -63,7 +60,7 @@ export default ({}: OnboardingProps) => {
             {version && <Typography level="body-sm">v{version}</Typography>}
           </div>
           <Typography level="body-sm">
-            IDE for iOS Development on iOS 
+            IDE for iOS Development on Windows and Linux
           </Typography>
         </div>
       </div>
@@ -87,7 +84,7 @@ export default ({}: OnboardingProps) => {
             href="#"
             onClick={(e) => {
               e.preventDefault();
-              open("https://github.com/endoftime6841/CrossCode-iOS-");
+              open("https://github.com/nab138/CrossCode/issues");
             }}
           >
             github

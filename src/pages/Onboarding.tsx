@@ -245,7 +245,7 @@ export default ({}: OnboardingProps) => {
           <Typography level="body-sm">
             You will need a Swift {SWIFT_VERSION_PREFIX} toolchain to use
             CrossCode. It is recommended to install it using swiftly, but you
-            can also install it manually.
+            must install it manually, cuz its an ios port duh.
           </Typography>
           <Divider />
           <CardContent>

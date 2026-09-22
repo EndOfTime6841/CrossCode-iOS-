@@ -194,7 +194,7 @@ export const IDEProvider: React.FC<{
     });
   }, []);
 
-    const locateToolchain = useCallback(async () => {
+        const locateToolchain = useCallback(async () => {
   let path = await dialog.open({
     directory: true,
     multiple: false,
@@ -237,22 +237,6 @@ export const IDEProvider: React.FC<{
   }
 }, [isWindows]);
 
-    const info = await invoke<Toolchain>("get_toolchain_info", {
-      toolchainPath: path,
-      isSwiftly: false,
-    }).catch((error) => {
-      console.error("Error getting toolchain info:", error);
-      addToast.error("Failed to get toolchain info");
-      return null;
-    });
-    if (!info) {
-      addToast.error("Invalid toolchain path or version not found");
-      return;
-    }
-    if (info) {
-      setSelectedToolchain(info);
-    }
-  }, [isWindows]);
 
   useEffect(() => {
     if (!initialized) return setReady(null);

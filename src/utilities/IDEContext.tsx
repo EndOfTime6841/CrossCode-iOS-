@@ -30,8 +30,6 @@ import { UpdateContext } from "./UpdateContext";
 import { isCompatable } from "../components/SwiftMenu";
 import { platform } from "@tauri-apps/plugin-os";
 
-
-
 let isMainWindow = getCurrentWindow().label === "main";
 const isIOS = platform() === "ios";
 
@@ -194,43 +192,75 @@ export const IDEProvider: React.FC<{
     });
   }, []);
 
-        const locateToolchain = useCallback(async () => {
-  let path: string | null;
-  try {
-    if (isIOS) {
-      let filePath = await dialog.open({
-        directory: false,
-        multiple: false,
-      });
-      if (!filePath) {
-        addToast.error("No file selected");
-        return;
-      }
-      const parts = filePath.split("/").filter((p) => p.length > 0);
-      if (parts.length >= 3) {
-        path = "/" + parts.slice(0, parts.length - 3).join("/");
+  const locateToolchain = useCallback(async () => {
+    let path: string | null;
+    try {
+      if (isIOS) {
+        let filePath = await dialog.open({
+          directory: false,
+          multiple: false,
+        });
+        if (!filePath) {
+          addToast.error("No file selected");
+          return;
+        }
+        const parts = filePath.split("/").filter((p) => p.length > 0);
+        if (parts.length >= 3) {
+          path = "/" + parts.slice(0, parts.length - 3).join("/");
+        } else {
+          addToast.error(
+            "Selected file is not inside a valid toolchain structure"
+          );
+          return;
+        }
       } else {
-        addToast.error("Selected file is not inside a valid toolchain structure");
+        path = await dialog.open({
+          directory: true,
+          multiple: false,
+        });
+      }
+    } catch (error) {
+      addToast.error("Dialog open failed: " + String(error));
+      console.error("Dialog open error:", error);
+      return;
+    }
+    if (!path) {
+      addToast.error("No path selected");
+      return;
+    }
+    if (!(await invoke("validate_toolchain", { toolchainPath: path }))) {
+      if (isWindows) {
+        if (path?.startsWith("\\\\wsl.localhost\\")) {
+          path = path.replace("\\\\wsl.localhost\\", "\\\\wsl$\\");
+        }
+        path = await invoke<string>("linux_path", {
+          path,
+        });
+        if (!(await invoke("validate_toolchain", { toolchainPath: path }))) {
+          addToast.error("Invalid toolchain path");
+          return;
+        }
+      } else {
+        addToast.error("Invalid toolchain path");
         return;
       }
-    } else {
-      path = await dialog.open({
-        directory: true,
-        multiple: false,
-      });
     }
-  } catch (error) {
-    addToast.error("Dialog open failed: " + String(error));
-    console.error("Dialog open error:", error);
-    return;
-  }
-  if (!path) {
-    addToast.error("No path selected");
-    return;
-  }
-  // ...rest unchanged
-
-
+    const info = await invoke<Toolchain>("get_toolchain_info", {
+      toolchainPath: path,
+      isSwiftly: false,
+    }).catch((error) => {
+      console.error("Error getting toolchain info:", error);
+      addToast.error("Failed to get toolchain info");
+      return null;
+    });
+    if (!info) {
+      addToast.error("Invalid toolchain path or version not found");
+      return;
+    }
+    if (info) {
+      setSelectedToolchain(info);
+    }
+  }, [isWindows]);
 
   useEffect(() => {
     if (!initialized) return setReady(null);
@@ -704,7 +734,7 @@ export const IDEProvider: React.FC<{
       )}
     </IDEContext.Provider>
   );
-});
+};
 
 export const useIDE = () => {
   const context = React.useContext(IDEContext);
@@ -713,4 +743,3 @@ export const useIDE = () => {
   }
   return context;
 };
-}
